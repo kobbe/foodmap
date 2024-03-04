@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>
+      Maps
+    </title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="ol.css" type="text/css">
+    <link rel="stylesheet" href="ol-layerswitcher.css" />
+    <script src="ol-debug.js"></script>
+    <script src="ObjTree.js"></script>
+    <script src="ol-layerswitcher.js"></script><!--<script src="https://unpkg.com/ol-layerswitcher@3.0.0"></script>-->
+  </head>
+<body>
+<div id="map" class="map">
+    
+</div>
+<div id="popup" class="ol-popup" style="display:none">
+      <a href="#" id="popup-closer" class="ol-popup-closer"></a>
+      <div id="popup-content"></div>
+    </div>
+</body>
+
+<script>    
+
+
+
+    var position_layer = new ol.layer.Vector({
+        source: new ol.source.Vector()
+    });
+    
+    var location_layer = new ol.layer.Vector({
+        source: new ol.source.Vector(),
+        updateWhileAnimating: true,
+        updateWhileInteracting: true,
+    });
+    
+    var proj = 'EPSG:3857'
+        
+    //TODO: set max zoom to not overload servers!
+    var osmTileLayer = new ol.layer.Tile({
+        type: 'base',
+        title: 'Open street map',
+        source: new ol.source.OSM(),
+        preload: 5,
+        maxZoom: 19
+    });
+          
+    var lantmaterietTopoExtent = [-20037508.342789, -20037508.342789, 20037508.342789, 20037508.342789];
+    var lantmaterietTopoResolutions = [156543.0339280410, 78271.51696402048,39135.75848201023, 19567.87924100512,
+                                        9783.939620502561, 4891.969810251280, 2445.984905125640, 1222.992452562820,
+                                        611.4962262814100, 305.7481131407048,152.8740565703525, 76.43702828517624,
+                                        38.21851414258813, 19.10925707129406,9.554628535647032, 4.777314267823516];
+    var lantmaterietTopoMatrixIds = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+          
+    var lantmaterietTopoTileGrid = new ol.tilegrid.WMTS({
+      tileSize: 256,
+      extent: lantmaterietTopoExtent,
+      resolutions: lantmaterietTopoResolutions,
+      matrixIds: lantmaterietTopoMatrixIds
+    });
+    
+    var lantmaterietTopoTileLayer = new ol.layer.Tile({
+      type: 'base',
+      title: 'Topologisk',
+      extent: lantmaterietTopoExtent,
+      preload: 5,
+      source: new ol.source.WMTS({
+        url: 'https://api.lantmateriet.se/open/topowebb-ccby/v1/wmts/token/033b6654-3752-366a-b9d5-aa931cdc9ccf/',
+        layer: 'topowebb',
+        format: 'image/png',
+        matrixSet: '3857',
+        tileGrid: lantmaterietTopoTileGrid,
+        version: '1.0.0',
+        style: 'default',
+        crossOrigin: 'anonymous',
+        attributions: 'Lantmäteriet'
+      })
+    });
+    
+    
+  var test = new ol.layer.Tile({
+    type: 'base',
+    title: 'Topologisk högupplöst',
+    extent: lantmaterietTopoExtent,
+    source: new ol.source.TileWMS({
+      url: 'https://forbattrakartan.lantmateriet.se/map/topowebb/',
+      params: {'LAYERS': 'topowebbkartan', 'TILED': true, 'VERSION': '1.1.1', 'TRANSPARENT':false}
+    })
+  });
+    
+    
+    var mousePositionControl = new ol.control.MousePosition({
+      coordinateFormat: ol.coordinate.createStringXY(4),
+      projection: 'EPSG:4326',
+      // comment the following two lines to have the mouse position
+      // be placed within the map.
+      //className: 'custom-mouse-position',
+      //target: document.getElementById('mouse-position'),
+      undefinedHTML: '&nbsp;'
+    });
+          
+    var view = new ol.View({
+          center: ol.proj.fromLonLat([17.6483, 59.8569], proj), // Uppsala
+          zoom: 12,
+          projection: proj
+        });
+    
+    var map = new ol.Map({
+        layers: [
+          test,
+          lantmaterietTopoTileLayer,
+          osmTileLayer,
+          position_layer,
+          location_layer],
+        target: 'map',
+        view: view
+    });
+    
+    const locate = document.createElement('div');
+    locate.className = 'ol-control ol-unselectable locate';
+    locate.innerHTML = '<button title="Locate me">◎</button>';
+    locate.addEventListener('click', function() {
+        var extent = position_layer.getSource().getExtent();
+      if (!ol.extent.isEmpty(extent)) {
+        map.getView().fit(extent, {
+          maxZoom: 11,
+          duration: 500
+        });
+      }
+    });
+    
+    map.addControl(new ol.control.Control({
+      element: locate
+    }));
+    
+    var layerSwitcher = new ol.control.LayerSwitcher({
+    });
+    map.addControl(layerSwitcher);
+    map.addControl(mousePositionControl);
+    
+    /**
+     * Elements that make up the popup.
+     */
+    const popup = document.getElementById('popup');
+    const popupContent = document.getElementById('popup-content');
+    const popupCloser = document.getElementById('popup-closer');
+    
+    /**
+     * Create an overlay to anchor the popup to the map.
+     */
+    const overlay = new ol.Overlay({
+      element: popup,
+      autoPan: {
+        animation: {
+          duration: 250,
+        },
+      },
+    });
+    map.addOverlay(overlay);
+    
+    
+    /**
+     * Add a click handler to hide the popup.
+     * @return {boolean} Don't follow the href.
+     */
+    popupCloser.onclick = function () {
+      overlay.setPosition(undefined);
+      popupCloser.blur();
+      return false;
+    };
+    
+    function disposeOverlay(){
+        overlay.setPosition(undefined);
+    }
+    
+    
+    // display popup on click
+    map.on('click', function (evt) {
+      const feature = map.forEachFeatureAtPixel(evt.pixel, function (feature) {
+        return feature;
+      });
+      disposeOverlay();
+      if (!feature) {
+        return;
+      }
+      popup.style.display = '';
+      overlay.setPosition(evt.coordinate);
+      popupContent.innerHTML = '<div>' + feature["note"] +'</div>';
+    });
+    
+    // change mouse cursor when over marker
+    map.on('pointermove', function (e) {
+      const pixel = map.getEventPixel(e.originalEvent);
+      const hit = map.hasFeatureAtPixel(pixel);
+      if (hit) {
+        this.getTargetElement().style.cursor = 'pointer';
+        } else {
+            this.getTargetElement().style.cursor = '';
+        }
+    });
+    
+    
+    // Close the popup when the map is moved
+    map.on('movestart', disposeOverlay);
+    
+    
+    add_position();
+    
+    var now = new Date();
+
+    function floor5(x)
+    {
+        return Math.floor(x / 5) * 5;
+    }
+    
+    var timeCache = now.getFullYear().toString() + now.getMonth().toString() + now.getDate().toString() + now.getHours().toString() + floor5(now.getMinutes()).toString();
+    
+    console.log(timeCache)
+        
+    var now = new Date();
+    
+    var sheedId = getURLParameter("sheetId");
+
+    var url = 'https://docs.google.com/spreadsheets/d/' + sheedId + '/gviz/tq?tqx=out:json&tq&gid=0&cacheid=' + timeCache;
+    
+    function loadFile(filePath) {    
+        var result = null;
+        var xmlhttp = new XMLHttpRequest();
+        xmlhttp.open("GET", filePath, false);
+        xmlhttp.send();
+        if (xmlhttp.status==200) {
+            result = xmlhttp.responseText;
+        }
+        return result;
+    }
+    
+    
+    var data = loadFile('https://corsproxy.io/?' + url);
+    
+    console.log(data);
+    
+    var jsonString = data.match(/(?<="table":).*(?=}\);)/g)[0]
+    var json = JSON.parse(jsonString)
+    
+    console.log(json);
+    
+    var table = []
+    var row = []
+    json.cols.forEach(colonne => row.push(colonne.label))
+    table.push(row)
+    json.rows.forEach(r => {
+      var row = []
+      r.c.forEach(cel => {
+          try{
+            var value = cel.f ? cel.f : cel.v
+          }
+          catch(e){
+            var value = ''
+          }
+          row.push(value)
+        }
+      )
+      table.push(row)
+      }
+    )
+    console.log(table)
+    
+    var nameIndex = table[0].findIndex(value => value.toLowerCase() == "namn")
+    var textIndex = table[0].findIndex(value => value.toLowerCase() == "text")
+    var posIndex = table[0].findIndex(value => value.toLowerCase() == "pos")
+    var ikonIndex = table[0].findIndex(value => value.toLowerCase() == "ikon")
+    
+    console.log(nameIndex, posIndex)
+    
+    table.slice(1).forEach(row => {
+        var name = row[nameIndex];
+        if (name != ""){
+            var text = row[textIndex];
+            var pos = row[posIndex];
+            var lat = pos.split(",")[0]
+            var lon =  pos.split(",")[1]
+            var ikon = row[ikonIndex];
+            
+            console.log(name, pos, lat, lon, Number(lat), Number(lon))
+            
+            var feature = add_location([Number(lon), Number(lat)]);
+            
+            feature["name"] = name;
+            feature["note"] = text;
+            feature["ikon"] = ikon;
+        }
+    });
+    
+    function getURLParameter(param)
+    {
+        var paramVal = "";
+        var urlSplit = window.location.href.split("?");
+        var parameterURL = urlSplit[1];
+        if (parameterURL) {
+            var parameters = parameterURL.split("&");
+            for (var i=0; i<parameters.length; i++){
+                var parameterSplit = parameters[i].split('=');
+                if(parameterSplit[0] == param){
+                    paramVal = parameterSplit[1];
+                }
+            }
+        }
+        return paramVal;
+    }
+    
+    function add_location(cord)
+    {
+        if (!cord)
+            console.log("doohh")
+        var feature = create_point(cord);
+        location_layer.getSource().addFeature(feature);
+        return feature;
+    }
+    
+    
+    function style_function_point(feature, resolution){
+        
+        var style1 = new ol.style.Style({
+            image: new ol.style.Circle({
+                radius: 14,
+                fill: new ol.style.Fill({color: '#EEEEEEEE'}),
+                stroke: new ol.style.Stroke({color: '##DDDDDDEE'}),
+            }),
+            zIndex: 20
+        });
+        
+        var style2 = new ol.style.Style({
+            text: new ol.style.Text({
+                text: feature["ikon"],
+                scale: 2
+            }),
+            zIndex: 20
+        });
+        
+        var style3 = new ol.style.Style({
+            text: new ol.style.Text({
+                text: feature["name"],
+                offsetX: -20,
+                textAlign: "right",
+                scale: 1.4,
+                fill: new ol.style.Fill({color: '#222'}),
+                stroke: new ol.style.Stroke({
+                    width: 3,
+                    color: '#DDDDDDEE'
+                    }),
+                backgroundFill: new ol.style.Fill({color: '#EEEEEE88'}),
+                
+            }),
+            zIndex: 10
+        });
+        
+        return [style1, style2, style3]
+    }
+    
+    
+    function create_point(cord){
+        var feature = new ol.Feature({
+            geometry: new ol.geom.Point(ol.proj.fromLonLat(cord))
+        });
+
+        
+        feature.setStyle(style_function_point);
+        return feature;
+    }
+    
+    function add_position()
+    {
+        var geolocation = new ol.Geolocation({
+        projection: view.getProjection()
+        });
+        
+        // handle geolocation error.
+        geolocation.on('error', function(error) {
+            var info = document.getElementById('info');
+            info.innerHTML = error.message;
+            info.style.display = '';
+          });
+    
+        var accuracyFeature = new ol.Feature();
+        geolocation.on('change:accuracyGeometry', function() {
+            accuracyFeature.setGeometry(geolocation.getAccuracyGeometry());
+          });
+
+          var positionFeature = new ol.Feature();
+          positionFeature.setStyle(new ol.style.Style({
+            image: new ol.style.Circle({
+              radius: 6,
+              fill: new ol.style.Fill({
+                color: '#3399CC'
+              }),
+              stroke: new ol.style.Stroke({
+                color: '#fff',
+                width: 2
+              })
+            })
+          }));
+
+          geolocation.on('change:position', function() {
+            var coordinates = geolocation.getPosition();
+            positionFeature.setGeometry(coordinates ?
+              new ol.geom.Point(coordinates) : null);
+          });
+          
+        position_layer.getSource().addFeature(accuracyFeature);
+        position_layer.getSource().addFeature(positionFeature);
+    
+        geolocation.setTracking(true);
+    }
+</script>
+</html>
