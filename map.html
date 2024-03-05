@@ -266,7 +266,12 @@
       table.push(row)
       }
     )
+
     console.log(table)
+
+    // For some reason some sheets have blank spaces in the first row.
+    if (table[0][0] == "")
+        table.shift();
     
     var nameIndex = table[0].findIndex(value => value.toLowerCase() == "namn")
     var textIndex = table[0].findIndex(value => value.toLowerCase() == "text")
