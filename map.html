@@ -213,7 +213,8 @@
 
     function floor5(x)
     {
-        return Math.floor(x / 5) * 5;
+        return x;
+        //return Math.floor(x / 5) * 5;
     }
     
     var timeCache = now.getFullYear().toString() + now.getMonth().toString() + now.getDate().toString() + now.getHours().toString() + floor5(now.getMinutes()).toString();
